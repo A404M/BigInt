@@ -421,8 +421,8 @@ BigInt operator*(BigInt b1, const BigInt &b2) {
     return b1 *= b2;
 }
 BigInt operator/(BigInt b1, const BigInt &b2) {
-    return b1 *= b2;
+    return b1 /= b2;
 }
 BigInt operator%(BigInt b1, const BigInt &b2) {
-    return b1 *= b2;
+    return b1 %= b2;
 }

@@ -28,7 +28,7 @@ int main() {
     mpz_class b{num2};
     a %= b;
     string binA = bin(a);
-    cout << binA << endl;
+    cout << (a<0?"-":"")+binA << endl;
 #endif
     BigInt b1{num1};
     BigInt b2{num2};
