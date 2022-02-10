@@ -59,7 +59,7 @@ public:
 
     BigInt &operator*=(BigInt);
     BigInt &operator/=(const BigInt&);
-    BigInt &operator%=(BigInt);
+    BigInt &operator%=(const BigInt&);
 
 
     std::string toString() const;
@@ -79,6 +79,7 @@ public:
     friend BigInt operator-(BigInt ,const BigInt &);
 
     friend BigInt operator*(BigInt ,const BigInt &);
+    friend BigInt operator/(BigInt ,const BigInt &);
     friend BigInt operator%(BigInt ,const BigInt &);
 };
 

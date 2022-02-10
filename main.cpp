@@ -1,5 +1,8 @@
 #include <iostream>
 #include "big-int/BigInt.h"
+
+#define TEST
+
 #ifdef TEST
 #include <gmpxx.h>
 #endif
@@ -18,17 +21,22 @@ string bin(mpz_class a){
 #endif
 
 int main() {
-    string num1 = "100012354564684351321654684687487979841321654154542528457928435637846124600000000000";
-    string num2 = "1287948965746546848746387446545681236389572756";
+    string num1 = "-9";
+    string num2 = "-4";
 #ifdef TEST
     mpz_class a{num1};
     mpz_class b{num2};
-    a /= b;
-    cout << "0b" + bin(a) << endl;
+    a %= b;
+    string binA = bin(a);
+    cout << binA << endl;
 #endif
     BigInt b1{num1};
     BigInt b2{num2};
-    b1 /= b2;
-    cout << "0b" + b1.toBinaryString();
+    b1 %= b2;
+    string binB = b1.toBinaryString();
+    cout << binB << endl;
+#ifdef TEST
+    cout << (binB == binA);
+#endif
     return 0;
 }

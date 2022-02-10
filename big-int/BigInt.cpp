@@ -121,13 +121,23 @@ BigInt::BigInt(Int value) : holder{value >= 0 ? static_cast<UInt>(value) : stati
 }
 BigInt::BigInt(const std::string &value) : BigInt(0){
     BigInt p = 1;
-    for(auto rit = value.crbegin(),rend = value.crend();rit < rend;++rit){
+    bool s = true;
+    auto rend = value.crend()-1;
+    if(*rend == '-'){
+        s = false;
+    }else if(*rend == '+'){
+        s = true;
+    }else{
+        ++rend;
+    }
+    for(auto rit = value.crbegin();rit < rend;++rit){
         auto digit = *rit-'0';
         if(digit < 0 || digit > 9)
             throw std::logic_error("BigInt::BigInt");
         *this += digit*p;
         p *= 10;
     }
+    this->sign = s;
 }
 BigInt::BigInt(BigInt &&value) noexcept: holder(std::move(value.holder)), sign(value.sign) {
     //empty
@@ -286,6 +296,55 @@ BigInt &BigInt::operator/=(const BigInt& value) {
     return *this;
 }
 
+BigInt &BigInt::operator%=(const BigInt &value) {
+    if(value == 0){
+        throw std::logic_error("Dividing by zero");
+    }
+    if(&value == this){
+        *this = 0;
+        return *this;
+    }
+
+    auto tb = value;
+
+    auto tSign = this->sign == value.sign;
+    tb.sign = this->sign = true;
+
+    while(!value.isHolderGreater(tb)){
+        auto test = *this <=> tb;
+        if(test == std::strong_ordering::greater){
+            do{
+                tb <<= 1;
+            }while(*this > tb);
+            tb >>= 1;
+        }else if(test == std::strong_ordering::less){
+            do{
+                if(tb.holder == value.holder) {
+                    if (*this >= tb)
+                        goto END;
+                    else
+                        goto RET;
+                }
+                tb >>= 1;
+            }while(*this < tb);
+        }else{//equal
+            *this = 0;
+            return *this;
+        }
+        END:
+        *this -= tb;
+    }
+
+    RET:
+    tb = value;
+    tb.sign = true;
+    if(!tSign){//valSign == -
+        *this = tb-*this;
+    }
+    this->sign = value.sign;
+    return *this;
+}
+
 
 
 std::string BigInt::toBinaryString() const {
@@ -299,6 +358,9 @@ std::string BigInt::toBinaryString() const {
         }else{
             break;
         }
+    }
+    if(!this->sign){
+        result = '-'+result;
     }
     return result;
 }
@@ -348,6 +410,19 @@ std::strong_ordering operator<=>(const BigInt &b1, const BigInt &b2) {
     }
 }
 
+BigInt operator+(BigInt b1, const BigInt &b2) {
+    return b1 += b2;
+}
+BigInt operator-(BigInt b1, const BigInt &b2) {
+    return b1 -= b2;
+}
+
 BigInt operator*(BigInt b1, const BigInt &b2) {
+    return b1 *= b2;
+}
+BigInt operator/(BigInt b1, const BigInt &b2) {
+    return b1 *= b2;
+}
+BigInt operator%(BigInt b1, const BigInt &b2) {
     return b1 *= b2;
 }
