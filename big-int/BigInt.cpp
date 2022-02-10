@@ -293,6 +293,13 @@ std::string BigInt::toBinaryString() const {
     for(auto rit = this->holder.rbegin(),rend = this->holder.rend();rit < rend;++rit){
         result += toBinary(*rit);
     }
+    for(auto it = result.begin();it < result.end();){
+        if(*it == '0'){
+            it = result.erase(it);
+        }else{
+            break;
+        }
+    }
     return result;
 }
 
