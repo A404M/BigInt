@@ -25,50 +25,50 @@ private:
     bool sign = true;//0->- 1->+         used in compression
     std::vector<UInt> holder;
 private:
-    static UInt hHalf(UBInt);
-    static UInt lHalf(UBInt);
+    [[nodiscard]] static UInt hHalf(UBInt);
+    [[nodiscard]] static UInt lHalf(UBInt);
 
-    static std::string toBinary(UInt);
+    [[nodiscard]] static std::string toBinary(UInt);
 
     void fit();
 
-    bool isHolderGreater(const BigInt &) const;
-    std::strong_ordering compareHolder(const BigInt &) const;
+    [[nodiscard]] bool isHolderGreater(const BigInt &) const;
+    [[nodiscard]] std::strong_ordering compareHolder(const BigInt &) const;
 
     void addToHolder(UBInt,decltype(holder)::size_type);
     void subToHolder(UInt,decltype(holder)::size_type);
 public:
-    BigInt(Int value = 0);
-    explicit BigInt(const std::string &value);
+    [[maybe_unused]] BigInt(Int value = 0);
+    [[maybe_unused]] explicit BigInt(const std::string &value);
 
-    BigInt(const BigInt &value) = default;
-    BigInt(BigInt &&value) noexcept;
+    [[maybe_unused]] BigInt(const BigInt &value) = default;
+    [[maybe_unused]] BigInt(BigInt &&value) noexcept;
 
     ~BigInt();
 
-    BigInt &operator=(const BigInt &value) = default;
-    BigInt &operator=(BigInt &&value) noexcept;
+    [[maybe_unused]] BigInt &operator=(const BigInt &value) = default;
+    [[maybe_unused]] BigInt &operator=(BigInt &&value) noexcept;
 
-    BigInt operator+() const;
-    BigInt operator-() const;
+    [[maybe_unused]][[nodiscard]] BigInt operator+() const;
+    [[maybe_unused]][[nodiscard]] BigInt operator-() const;
 
-    BigInt &operator<<=(unsigned);
-    BigInt &operator>>=(unsigned);
+    [[maybe_unused]] BigInt &operator<<=(unsigned);
+    [[maybe_unused]] BigInt &operator>>=(unsigned);
 
-    BigInt &operator+=(BigInt);
-    BigInt &operator-=(const BigInt&);
+    [[maybe_unused]] BigInt &operator+=(BigInt);
+    [[maybe_unused]] BigInt &operator-=(const BigInt&);
 
-    BigInt &operator*=(BigInt);
-    BigInt &operator/=(const BigInt&);
-    BigInt &operator%=(const BigInt&);
+    [[maybe_unused]] BigInt &operator*=(BigInt);
+    [[maybe_unused]] BigInt &operator/=(const BigInt&);
+    [[maybe_unused]] BigInt &operator%=(const BigInt&);
 
 
-    std::string toString() const;
-    std::string toBinaryString() const;
+    [[maybe_unused]][[nodiscard]] std::string toString() const;
+    [[maybe_unused]][[nodiscard]] std::string toBinaryString() const;
 
 
     template<typename T>
-    T &to() {
+    [[maybe_unused]][[nodiscard]] T &to() {
         return *reinterpret_cast<T*>(&this->holder.front());
     }
 
