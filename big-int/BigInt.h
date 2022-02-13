@@ -20,6 +20,7 @@ private:
     static const UBInt MAX = UINT32_MAX;
     static const UBInt H_HALF = ~static_cast<UBInt>(MAX);
     static const UBInt L_HALF = MAX;
+    static const UInt HIGH_BIT = static_cast<UInt>(1)<<(sizeof(UInt)*8-1);
 
     bool sign = true;//0->- 1->+         used in compression
     std::vector<UInt> holder;
@@ -34,8 +35,8 @@ private:
     bool isHolderGreater(const BigInt &) const;
     std::strong_ordering compareHolder(const BigInt &) const;
 
-    void addToHolder(UBInt,decltype(holder.size()));
-    void subToHolder(UInt,decltype(holder.size()));
+    void addToHolder(UBInt,decltype(holder)::size_type);
+    void subToHolder(UInt,decltype(holder)::size_type);
 public:
     BigInt(Int value = 0);
     explicit BigInt(const std::string &value);
@@ -64,6 +65,12 @@ public:
 
     std::string toString() const;
     std::string toBinaryString() const;
+
+
+    template<typename T>
+    T &to() {
+        return *reinterpret_cast<T*>(&this->holder.front());
+    }
 
 
     friend bool operator==(const BigInt &,const BigInt &);

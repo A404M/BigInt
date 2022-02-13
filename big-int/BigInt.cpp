@@ -16,7 +16,7 @@ BigInt::UInt BigInt::lHalf(UBInt var) {
 
 std::string BigInt::toBinary(UInt var) {
     std::string result;
-    for(UInt i = 0b10000000000000000000000000000000;i != 0;i>>=1)
+    for(UInt i = HIGH_BIT;i != 0;i>>=1)
         result += (i&var)?'1':'0';
     return result;
 }
@@ -69,28 +69,26 @@ std::strong_ordering BigInt::compareHolder(const BigInt &b) const {
     return std::strong_ordering::equal;
 }
 
-void BigInt::addToHolder(UBInt val,decltype(holder.size()) i){
+void BigInt::addToHolder(UBInt val,decltype(holder)::size_type i){
     while(val != 0){
         if(this->holder.size() > i){
             val += this->holder[i];
             this->holder[i] = lHalf(val);
         }else{
-            for(auto j = this->holder.size();j < i;++j){
-                this->holder.push_back(0);
-            }
+            this->holder.insert(this->holder.end(),i-this->holder.size(),0);
             this->holder.push_back(lHalf(val));
         }
         val = hHalf(val);
         ++i;
     }
 }
-void BigInt::subToHolder(UInt v,decltype(holder.size()) i){///@test me
+void BigInt::subToHolder(UInt v,decltype(holder.size()) i){
     UBInt val = v;
     if(this->holder.size() > i){
-        if(this->holder[i] < val){
+        if(this->holder[i] < val){//get carry
             auto j = i+1;
             while(true){//get one from the others
-                if(j >= this->holder.size())
+                if(j == this->holder.size())
                     throw std::logic_error("BigInt::subToHolder");
                 else if(this->holder[j] != 0)
                     break;
@@ -98,15 +96,17 @@ void BigInt::subToHolder(UInt v,decltype(holder.size()) i){///@test me
                     this->holder[j] = MAX;
                 ++j;
             }
-            this->holder[j] -= 1;
-            UBInt temp = this->holder[i];
-            temp += MAX+1;
+            this->holder[j]--;
+            auto &hi = this->holder[i];
+            UBInt temp = hi;
+            temp += MAX;
+            temp++;
             temp -= val;
 
             if(temp > MAX)
                 throw std::logic_error("BigInt::subToHolder");
 
-            this->holder[i] = temp;
+            hi = temp;
         }else{
             this->holder[i] -= val;
         }
@@ -116,7 +116,7 @@ void BigInt::subToHolder(UInt v,decltype(holder.size()) i){///@test me
     this->fit();
 }
 
-BigInt::BigInt(Int value) : holder{value >= 0 ? static_cast<UInt>(value) : static_cast<UInt>(-value)}, sign(value >= 0) {
+BigInt::BigInt(Int value) : sign(value >= 0), holder{value >= 0 ? static_cast<UInt>(value) : static_cast<UInt>(-value)} {
     //empty
 }
 BigInt::BigInt(const std::string &value) : BigInt(0){
@@ -139,7 +139,7 @@ BigInt::BigInt(const std::string &value) : BigInt(0){
     }
     this->sign = s;
 }
-BigInt::BigInt(BigInt &&value) noexcept: holder(std::move(value.holder)), sign(value.sign) {
+BigInt::BigInt(BigInt &&value) noexcept: sign(value.sign), holder(std::move(value.holder)) {
     //empty
 }
 
@@ -177,9 +177,12 @@ BigInt &BigInt::operator<<=(unsigned int n) {
             *(rit - 1) |= hHalf(temp);
             *rit = static_cast<UInt>(temp);
         }
+        if(this->holder.back() == 0){//this does fit job
+            this->holder.erase(this->holder.end()-1);
+        }
     }
     this->holder.insert(this->holder.begin(),n/SIZE_BIT,0);
-    this->fit();
+    //this->fit();
     return *this;
 }
 
@@ -226,6 +229,10 @@ BigInt &BigInt::operator+=(BigInt value) {
 }
 
 BigInt &BigInt::operator-=(const BigInt &value) {
+    if(this == &value || *this == value){
+        *this = 0;
+        return *this;
+    }
     *this += -value;
     return *this;
 }
@@ -235,12 +242,14 @@ BigInt &BigInt::operator*=(BigInt value) {
     std::swap(*this,temp);
     this->sign = temp.sign == value.sign;//assign the sign
 
-    for(decltype(value.holder.size()) i = 0;i < value.holder.size();++i){
+    auto ts = temp.holder.size(),vs = value.holder.size();
+
+    for(decltype(value.holder.size()) i = 0;i < vs;++i){
         UBInt t = value.holder[i];
         if(t == 0)
             continue;
 
-        for(decltype(i) j = 0;j < temp.holder.size();++j){
+        for(decltype(i) j = 0;j < ts;++j){
             this->addToHolder(t*temp.holder[j],i+j);
         }
     }
@@ -248,13 +257,18 @@ BigInt &BigInt::operator*=(BigInt value) {
     return *this;
 }
 
-BigInt &BigInt::operator/=(const BigInt& value) {
+BigInt &BigInt::operator/=(const BigInt &value) {
     if(value == 0){
         throw std::logic_error("Dividing by zero");
     }
 
+    if(&value == this){
+        *this = 0;
+        return *this;
+    }
+
     auto tb = value;
-    BigInt toAdd = 1;//starts from 1
+    UInt add = 1;
 
     BigInt temp = 0;
     std::swap(*this,temp);
@@ -262,33 +276,92 @@ BigInt &BigInt::operator/=(const BigInt& value) {
     tb.sign = true;
     temp.sign = true;
 
-    while(!value.isHolderGreater(tb)){
-        auto test = temp <=> tb;
+    int index = temp.holder.size()-tb.holder.size();
+    tb.holder.insert(tb.holder.begin(),index,0);
+
+    while(true){
+        auto test = temp.compareHolder(tb);
         if(test == std::strong_ordering::greater){
-            do{
+            int diff = temp.holder.size()-tb.holder.size();
+            if(diff) {
+                index += diff;
+                tb.holder.insert(tb.holder.begin(), diff, 0);
+                continue;
+            }
+            while(true){
                 tb <<= 1;
-                toAdd <<= 1;
-            }while(temp > tb);
+                if(tb.isHolderGreater(temp)){
+                    break;
+                }
+                if(add == HIGH_BIT){
+                    index++;
+                    add = 1;
+                }else{
+                    add <<= 1;
+                }
+            }
             tb >>= 1;
-            toAdd >>= 1;
         }else if(test == std::strong_ordering::less){
-            do{
-                if(tb.holder == value.holder) {
-                    if (temp >= tb)
+            int diff = tb.holder.size()-temp.holder.size();
+            if(diff) {
+                if(diff > index){
+                    --diff;
+                    if(diff > index){//temp is much less
+                        goto RET;
+                    }
+                    index -= diff;
+                    tb.holder.erase(tb.holder.begin(),tb.holder.begin()+diff);
+                    //sizes are not equal in here
+                    goto REST_IN_LESS;
+                }
+                index -= diff;
+                tb.holder.erase(tb.holder.begin(),tb.holder.begin()+diff);
+                if(tb <= value){
+                    if (!tb.isHolderGreater(temp))
                         goto END;
                     else
                         goto RET;
+                }else{
+                    continue;
                 }
-                tb >>= 1;
-                toAdd >>= 1;
-            }while(temp < tb);
+            }
+            if(index > 0) {
+                //both sizes are equal in here
+                auto highByte = tb.holder.back(),tempHighByte = temp.holder.back();
+                int times = 0;
+                do {
+                    ++times;
+                    if (add == 1) {
+                        index--;
+                        add = HIGH_BIT;
+                    } else {
+                        add >>= 1;
+                    }
+                    highByte >>= 1;
+                } while (tempHighByte <= highByte);
+                tb >>= times;
+            }else{
+                REST_IN_LESS:
+                do {
+                    if (add == 1) {
+                        index--;
+                        add = HIGH_BIT;
+                    } else {
+                        add >>= 1;
+                    }
+                    if (index < 0) {
+                        goto RET;
+                    }
+                    tb >>= 1;
+                } while (tb.isHolderGreater(temp));
+            }
         }else{//equal
-            *this += 1;
+            this->addToHolder(1,0);
             break;
         }
         END:
         temp -= tb;
-        *this += toAdd;
+        this->addToHolder(add,index);
     }
 
     RET:
@@ -307,15 +380,25 @@ BigInt &BigInt::operator%=(const BigInt &value) {
 
     auto tb = value;
 
+    if(tb.holder.size() < this->holder.size()){
+        auto diff = this->holder.size()-tb.holder.size();
+        tb.holder.insert(tb.holder.begin(),diff,0);
+    }
+
     auto tSign = this->sign == value.sign;
     tb.sign = this->sign = true;
 
-    while(!value.isHolderGreater(tb)){
+    while(true){
         auto test = *this <=> tb;
         if(test == std::strong_ordering::greater){
+            auto diff = this->holder.size()-tb.holder.size();
+            if(diff) {
+                tb.holder.insert(tb.holder.begin(), diff, 0);
+                continue;
+            }
             do{
                 tb <<= 1;
-            }while(*this > tb);
+            }while(*this >= tb);
             tb >>= 1;
         }else if(test == std::strong_ordering::less){
             do{
@@ -345,8 +428,19 @@ BigInt &BigInt::operator%=(const BigInt &value) {
     return *this;
 }
 
-
-
+std::string BigInt::toString() const {
+    if(*this == 0)
+        return "0";
+    std::string result = (this->sign)?"":"-";
+    auto temp = *this;
+    temp.sign = true;
+    while(temp != 0){
+        result += (temp%10).holder.front()+'0';
+        temp /= 10;
+    }
+    std::reverse(result.begin(),result.end());
+    return result;
+}
 std::string BigInt::toBinaryString() const {
     std::string result;
     for(auto rit = this->holder.rbegin(),rend = this->holder.rend();rit < rend;++rit){
