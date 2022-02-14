@@ -70,13 +70,14 @@ std::strong_ordering BigInt::compareHolder(const BigInt &b) const {
 }
 
 void BigInt::addToHolder(UBInt val,decltype(holder)::size_type i){
-    while(val != 0){
+    while(val){
         if(this->holder.size() > i){
             val += this->holder[i];
             this->holder[i] = lHalf(val);
         }else{
-            this->holder.insert(this->holder.end(),i-this->holder.size(),0);
-            this->holder.push_back(lHalf(val));
+            this->holder.insert(this->holder.end(),i-this->holder.size()+1,0);
+            //this->holder.push_back(lHalf(val));
+            this->holder.back() = lHalf(val);
         }
         val = hHalf(val);
         ++i;
@@ -85,28 +86,26 @@ void BigInt::addToHolder(UBInt val,decltype(holder)::size_type i){
 void BigInt::subToHolder(UInt v,decltype(holder.size()) i){
     UBInt val = v;
     if(this->holder.size() > i){
-        if(this->holder[i] < val){//get carry
+        auto &vI = this->holder[i];
+        if(vI < val){//get carry
             auto j = i+1;
+            auto &vJ = this->holder[j];
             while(true){//get one from the others
                 if(j == this->holder.size())
                     throw std::logic_error("BigInt::subToHolder");
-                else if(this->holder[j] != 0)
+                else if(vJ != 0)
                     break;
                 else
-                    this->holder[j] = MAX;
+                    vJ = MAX;
                 ++j;
             }
-            this->holder[j]--;
-            auto &hi = this->holder[i];
-            UBInt temp = hi;
-            temp += MAX;
-            temp++;
-            temp -= val;
+            --vJ;
+            UBInt temp = static_cast<UBInt>(vI)+MAX+static_cast<UBInt>(1)-val;
 
             if(temp > MAX)
                 throw std::logic_error("BigInt::subToHolder");
 
-            hi = temp;
+            vI = temp;
         }else{
             this->holder[i] -= val;
         }
@@ -146,15 +145,13 @@ BigInt::BigInt(BigInt &&value) noexcept: sign(value.sign), holder(std::move(valu
 BigInt &BigInt::operator=(BigInt &&value)  noexcept {
     std::swap(this->holder,value.holder);
     this->sign = value.sign;
-    if(!value.holder.empty())
-        value.holder.clear();
+    value.holder.clear();
     return *this;
 }
 
 BigInt::~BigInt() {
-    if(!this->holder.empty())
-        this->holder.clear();
-    this->sign = false;
+    //this->holder.clear();
+    //this->sign = false;
 }
 
 BigInt BigInt::operator+() const{
@@ -229,7 +226,7 @@ BigInt &BigInt::operator+=(BigInt value) {
 }
 
 BigInt &BigInt::operator-=(const BigInt &value) {
-    if(this == &value || *this == value){
+    if(this == &value){
         *this = 0;
         return *this;
     }
@@ -244,7 +241,7 @@ BigInt &BigInt::operator*=(BigInt value) {
 
     auto ts = temp.holder.size(),vs = value.holder.size();
 
-    for(decltype(value.holder.size()) i = 0;i < vs;++i){
+    for(decltype(this->holder)::size_type i = 0;i < vs;++i){
         UBInt t = value.holder[i];
         if(t == 0)
             continue;
@@ -273,8 +270,8 @@ BigInt &BigInt::operator/=(const BigInt &value) {
     BigInt temp = 0;
     std::swap(*this,temp);
 
-    tb.sign = true;
-    temp.sign = true;
+    tb.sign = false;//negative
+    temp.sign = true;//positive
 
     int index = temp.holder.size()-tb.holder.size();
     tb.holder.insert(tb.holder.begin(),index,0);
@@ -316,7 +313,7 @@ BigInt &BigInt::operator/=(const BigInt &value) {
                 }
                 index -= diff;
                 tb.holder.erase(tb.holder.begin(),tb.holder.begin()+diff);
-                if(tb <= value){
+                if(!tb.isHolderGreater(value)){
                     if (!tb.isHolderGreater(temp))
                         goto END;
                     else
@@ -342,15 +339,18 @@ BigInt &BigInt::operator/=(const BigInt &value) {
                 tb >>= times;
             }else{
                 REST_IN_LESS:
+                /*if(index < 0){
+                    goto RET;
+                }*/
                 do {
                     if (add == 1) {
                         index--;
+                        if (index < 0) {
+                            goto RET;
+                        }
                         add = HIGH_BIT;
                     } else {
                         add >>= 1;
-                    }
-                    if (index < 0) {
-                        goto RET;
                     }
                     tb >>= 1;
                 } while (tb.isHolderGreater(temp));
@@ -360,7 +360,7 @@ BigInt &BigInt::operator/=(const BigInt &value) {
             break;
         }
         END:
-        temp -= tb;
+        temp += tb;//tb is negative
         this->addToHolder(add,index);
     }
 
@@ -386,10 +386,12 @@ BigInt &BigInt::operator%=(const BigInt &value) {
     }
 
     auto tSign = this->sign == value.sign;
-    tb.sign = this->sign = true;
+
+    tb.sign = false;
+    this->sign = true;
 
     while(true){
-        auto test = *this <=> tb;
+        auto test = this->compareHolder(tb);
         if(test == std::strong_ordering::greater){
             auto diff = this->holder.size()-tb.holder.size();
             if(diff) {
@@ -398,24 +400,24 @@ BigInt &BigInt::operator%=(const BigInt &value) {
             }
             do{
                 tb <<= 1;
-            }while(*this >= tb);
+            }while(!tb.isHolderGreater(*this));
             tb >>= 1;
         }else if(test == std::strong_ordering::less){
             do{
-                if(tb.holder == value.holder) {
-                    if (*this >= tb)
+                tb >>= 1;
+                if(!tb.isHolderGreater(value)) {
+                    if (!tb.isHolderGreater(*this))
                         goto END;
                     else
                         goto RET;
                 }
-                tb >>= 1;
-            }while(*this < tb);
+            }while(tb.isHolderGreater(*this));
         }else{//equal
             *this = 0;
             return *this;
         }
         END:
-        *this -= tb;
+        *this += tb;
     }
 
     RET:
