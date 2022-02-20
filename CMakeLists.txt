@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.21.1)
 project(BigInt)
 
 set(CMAKE_CXX_COMPILER g++-10)

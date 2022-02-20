@@ -5,6 +5,7 @@
 #include "BigInt.h"
 #include <stdexcept>
 #include <algorithm>
+#include <cmath>
 
 BigInt::UInt BigInt::hHalf(UBInt var) {
     return var >> (sizeof(UInt) * 8);
@@ -72,11 +73,11 @@ std::strong_ordering BigInt::compareHolder(const BigInt &b) const {
 void BigInt::addToHolder(UBInt val,decltype(holder)::size_type i){
     while(val){
         if(this->holder.size() > i){
-            val += this->holder[i];
-            this->holder[i] = lHalf(val);
+            auto &ref = this->holder[i];
+            val += ref;
+            ref = lHalf(val);
         }else{
             this->holder.insert(this->holder.end(),i-this->holder.size()+1,0);
-            //this->holder.push_back(lHalf(val));
             this->holder.back() = lHalf(val);
         }
         val = hHalf(val);
@@ -147,11 +148,6 @@ BigInt &BigInt::operator=(BigInt &&value)  noexcept {
     this->sign = value.sign;
     value.holder.clear();
     return *this;
-}
-
-BigInt::~BigInt() {
-    //this->holder.clear();
-    //this->sign = false;
 }
 
 BigInt BigInt::operator+() const{
@@ -253,6 +249,37 @@ BigInt &BigInt::operator*=(BigInt value) {
     this->fit();
     return *this;
 }
+BigInt &BigInt::operator*=(UInt val) {
+    BigInt temp = 0;
+    std::swap(*this,temp);
+    auto ts = temp.holder.size();
+    this->sign = temp.sign;
+
+    for(decltype(ts) j = 0;j < ts;++j){
+        this->addToHolder(static_cast<UBInt>(val)*temp.holder[j],j);
+    }
+
+    return *this;
+}
+
+#define SHIFT_TO_RIGHT(add,index,HIGH_BIT) \
+if((add) == 1){         \
+    --(index);          \
+    if((index) < 0){    \
+        goto RET;       \
+    }                   \
+    (add) = (HIGH_BIT); \
+}else{                  \
+    (add) >>= 1;        \
+}
+
+#define SHIFT_TO_LEFT(add,index,HIGH_BIT) \
+if((add) == (HIGH_BIT)){    \
+    ++(index);              \
+    (add) = 1;              \
+}else{                      \
+    (add) <<= 1;            \
+}
 
 BigInt &BigInt::operator/=(const BigInt &value) {
     if(value == 0){
@@ -260,112 +287,112 @@ BigInt &BigInt::operator/=(const BigInt &value) {
     }
 
     if(&value == this){
+        *this = 1;
+        return *this;
+    }else if(value.isHolderGreater(*this)){
         *this = 0;
         return *this;
     }
 
     auto tb = value;
     UInt add = 1;
+    int index = 0;
 
     BigInt temp = 0;
     std::swap(*this,temp);
+    this->sign = temp.sign == value.sign;//assign the sign
 
     tb.sign = false;//negative
     temp.sign = true;//positive
 
-    int index = temp.holder.size()-tb.holder.size();
-    tb.holder.insert(tb.holder.begin(),index,0);
-
     while(true){
         auto test = temp.compareHolder(tb);
         if(test == std::strong_ordering::greater){
-            int diff = temp.holder.size()-tb.holder.size();
+            decltype(index) diff = temp.holder.size()-tb.holder.size();
             if(diff) {
                 index += diff;
                 tb.holder.insert(tb.holder.begin(), diff, 0);
                 continue;
             }
+            auto q = temp.holder.back()/tb.holder.back();
+            int l2 = 0;
             while(true){
-                tb <<= 1;
-                if(tb.isHolderGreater(temp)){
+                q >>= 1;
+                if(!q){
                     break;
                 }
-                if(add == HIGH_BIT){
-                    index++;
-                    add = 1;
-                }else{
-                    add <<= 1;
+                ++l2;
+                SHIFT_TO_LEFT(add,index,HIGH_BIT)
+            }
+            if(l2){
+                tb <<= l2;
+                if(tb.isHolderGreater(temp)) {
+                    tb >>= 1;
+                    if(add == 1){
+                        --index;
+                        add = HIGH_BIT;
+                    }else{
+                        add >>= 1;
+                    }
                 }
             }
-            tb >>= 1;
         }else if(test == std::strong_ordering::less){
-            int diff = tb.holder.size()-temp.holder.size();
+            decltype(index) diff = tb.holder.size()-temp.holder.size();
+            UBInt q;
             if(diff) {
                 if(diff > index){
-                    --diff;
-                    if(diff > index){//temp is much less
-                        goto RET;
-                    }
-                    index -= diff;
-                    tb.holder.erase(tb.holder.begin(),tb.holder.begin()+diff);
-                    //sizes are not equal in here
+                    q = *reinterpret_cast<UBInt*>(&(tb.holder.back()))/temp.holder.back();
                     goto REST_IN_LESS;
                 }
                 index -= diff;
-                tb.holder.erase(tb.holder.begin(),tb.holder.begin()+diff);
-                if(!tb.isHolderGreater(value)){
-                    if (!tb.isHolderGreater(temp))
-                        goto END;
-                    else
-                        goto RET;
+                if(index < 0){
+                    goto RET;
                 }else{
+                    tb.holder.erase(tb.holder.begin(),tb.holder.begin()+diff);
                     continue;
                 }
             }
-            if(index > 0) {
-                //both sizes are equal in here
-                auto highByte = tb.holder.back(),tempHighByte = temp.holder.back();
-                int times = 0;
-                do {
-                    ++times;
-                    if (add == 1) {
-                        index--;
-                        add = HIGH_BIT;
-                    } else {
-                        add >>= 1;
-                    }
-                    highByte >>= 1;
-                } while (tempHighByte <= highByte);
-                tb >>= times;
-            }else{
-                REST_IN_LESS:
-                /*if(index < 0){
-                    goto RET;
-                }*/
-                do {
-                    if (add == 1) {
-                        index--;
-                        if (index < 0) {
-                            goto RET;
-                        }
-                        add = HIGH_BIT;
-                    } else {
-                        add >>= 1;
-                    }
-                    tb >>= 1;
-                } while (tb.isHolderGreater(temp));
+            q = tb.holder.back()/temp.holder.back();
+            REST_IN_LESS:
+            int l2 = 0;
+            while(q){
+                SHIFT_TO_RIGHT(add,index,HIGH_BIT)
+                q >>= 1;
+                ++l2;
+            }
+            if(l2){
+                tb >>= l2;
             }
         }else{//equal
-            this->addToHolder(1,0);
+            this->addToHolder(add,index);
             break;
         }
-        END:
         temp += tb;//tb is negative
         this->addToHolder(add,index);
     }
 
     RET:
-    this->sign = temp.sign == value.sign;//assign the sign
+    return *this;
+}
+BigInt &BigInt::operator/=(UInt val) {
+    BigInt temp = 0;
+    std::swap(*this,temp);
+    this->sign = temp.sign;
+    auto rit = temp.holder.rbegin();
+    UBInt q = *rit/val;
+    UBInt r = *rit%val;
+    ++rit;
+    this->holder.front() = q;
+    for(auto rend = temp.holder.rend();rit != rend;++rit){
+        UBInt t = r;
+        t <<= sizeof(UInt)*8;
+        t |= *rit;
+        q = t/val;
+        r = t%val;
+        this->holder.insert(this->holder.begin(),0);
+        this->holder.front() = q;
+    }
+    this->fit();
     return *this;
 }
 
@@ -394,24 +421,21 @@ BigInt &BigInt::operator%=(const BigInt &value) {
         auto test = this->compareHolder(tb);
         if(test == std::strong_ordering::greater){
             auto diff = this->holder.size()-tb.holder.size();
-            if(diff) {
-                tb.holder.insert(tb.holder.begin(), diff, 0);
+            if(diff){
+                tb.holder.insert(tb.holder.begin(),diff,0);
                 continue;
             }
-            do{
-                tb <<= 1;
-            }while(!tb.isHolderGreater(*this));
-            tb >>= 1;
+            tb *= this->holder.back()/tb.holder.back();
         }else if(test == std::strong_ordering::less){
-            do{
-                tb >>= 1;
-                if(!tb.isHolderGreater(value)) {
-                    if (!tb.isHolderGreater(*this))
-                        goto END;
-                    else
-                        goto RET;
+            auto diff = tb.holder.size()-this->holder.size();
+            if(diff){
+                tb.holder.erase(tb.holder.begin(),tb.holder.begin()+diff);
+                if(value.isHolderGreater(tb)){
+                    goto RET;
                 }
-            }while(tb.isHolderGreater(*this));
+                continue;
+            }
+            ///todo
         }else{//equal
             *this = 0;
             return *this;
@@ -444,6 +468,9 @@ std::string BigInt::toString() const {
     return result;
 }
 std::string BigInt::toBinaryString() const {
+    if(*this == 0){
+        return "0";
+    }
     std::string result;
     for(auto rit = this->holder.rbegin(),rend = this->holder.rend();rit < rend;++rit){
         result += toBinary(*rit);
